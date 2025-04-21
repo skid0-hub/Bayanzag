@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8">
+  <title>Аялагчдын Бүртгэл</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: url(background.png); }
+    .container { max-width: 1000px; margin: auto; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    .form-group, .form-row { margin-bottom: 15px; }
+    input, select, button { font-size: 14px; }
+    input, select { width: 100%; padding: 10px; }
+    button { padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 5px; }
+    .hidden { display: none; }
+    .flag-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    .flag-item { cursor: pointer; text-align: center; padding: 5px; border: 1px solid #ccc; border-radius: 4px; }
+    .flag-item img { width: 40px; border-radius: 4px; }
+    .selected-output { margin-top: 5px; font-size: 0.9rem; color: #333; }
+    .payment-card { background: #e5e7eb; padding: 10px; border-radius: 5px; margin-top: 10px; }
+    .modal.hidden { display: none; }
+    .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; }
+    .modal-content { background: white; padding: 20px; border-radius: 5px; }
+    .registration-table { margin-top: 20px; width: 100%; border-collapse: collapse; }
+    .registration-table th, .registration-table td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    .current-date-background { position: absolute; top: 20px; right: 20px; font-size: 1.5rem; opacity: 0.1; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div class="current-date-background" id="backgroundDate"></div>
+  <div class="container">
+    <h1>Аялагчдын Бүртгэл</h1>
+    <form id="groupForm">
+      <div class="form-group"><input type="text" id="guideName" placeholder="Хөтчийн нэр" required></div>
+      <div class="form-group"><input type="text" id="company" placeholder="Компани (заавал биш)"></div>
+      <div class="form-group">
+        <label>Жолооч болон хөтчийн тоо:</label>
+        <input type="number" id="drivers" value="1" min="2" onchange="calculateTotal()">
+      </div>
+      <div class="form-row">
+        <div class="form-group"><input type="text" id="carNumber" placeholder="Машины дугаар" required></div>
+        <div class="form-group"><input type="number" id="visitors" placeholder="Жуулчдын тоо" min="0" required readonly></div>
+      </div>
+
+      <div class="form-group">
+        <label>Улс сонгох (эхлээд 10 улс):</label>
+        <button type="button" id="add-country-btn">+ Үлдсэнээс сонгох</button>
+        <div id="remaining-form" class="hidden">
+          <select id="remaining-select" size="10"></select>
+          <button type="button" id="add-selected-btn">Сонгож нэмэх</button>
+        </div>
+        <div class="flag-grid" id="flagGrid"></div>
+        <input type="hidden" id="countriesSelected" name="countriesSelected">
+        <div class="selected-output" id="flag-selected-output"></div>
+      </div>
+
+      <div class="payment-card">
+        <div>Нийт төлбөр: <strong id="totalAmount">0₮</strong></div>
+        <div><span id="visitorCost">0₮</span> + <span id="driverCost">0₮</span></div>
+        <button type="button" onclick="showConfirmation()">Төлбөр хийх</button>
+      </div>
+
+      <div id="confirmationModal" class="modal hidden">
+        <div class="modal-content">
+          <p>Бүртгэлийг баталгаажуулах уу?</p>
+          <button type="button" onclick="saveRegistration()">Тийм</button>
+          <button type="button" onclick="hideConfirmation()">Үгүй</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="registration-list">
+      <h3>Сүүлийн бүртгэлүүд</h3>
+      <table class="registration-table">
+        <thead>
+          <tr><th>Огноо</th><th>Гид</th><th>Жуулчид</th><th>Улс</th><th>Төлбөр</th></tr>
+        </thead>
+        <tbody id="registrationTableBody"></tbody>
+      </table>
+    </div>
+    <div class="live-stats">
+      <div><strong>Нийт жуулчид:</strong> <span id="totalVisitors">0</span></div>
+      <div><strong>Нийт орлого:</strong> <span id="totalIncome">0₮</span></div>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById("backgroundDate").textContent = new Date().toLocaleDateString("mn-MN");
+
+    const countryCounts = {};
+    const flagGrid = document.getElementById("flagGrid");
+    const hiddenInput = document.getElementById("countriesSelected");
+    const flagOutput = document.getElementById("flag-selected-output");
+    const addBtn = document.getElementById("add-country-btn");
+    const remForm = document.getElementById("remaining-form");
+    const remSelect = document.getElementById("remaining-select");
+    const addSelected = document.getElementById("add-selected-btn");
+
+    fetch('https://restcountries.com/v3.1/all')
+      .then(res => res.json())
+      .then(data => {
+        data.sort((a,b) => a.name.common.localeCompare(b.name.common));
+        const all = data.map(c => ({ name: c.name.common, flag: c.flags.png||c.flags.svg }));
+        const initial = all.slice(0,10);
+        const remaining = all.slice(10);
+        initial.forEach(c => renderFlag(c));
+        remaining.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.name;
+          opt.textContent = c.name;
+          remSelect.appendChild(opt);
+        });
+        addBtn.onclick = () => remForm.classList.toggle('hidden');
+        addSelected.onclick = () => {
+          const sel = Array.from(remSelect.selectedOptions).map(o=>o.value);
+          sel.forEach(name => {
+            const idx = remaining.findIndex(c=>c.name===name);
+            if(idx>-1) {
+              const c = remaining.splice(idx,1)[0];
+              renderFlag(c);
+              Array.from(remSelect.options).find(o=>o.value===name).remove();
+            }
+          });
+        };
+      });
+
+    function renderFlag(country) {
+      const div = document.createElement("div");
+      div.className = "flag-item";
+      div.innerHTML = `<img src="${country.flag}" alt="${country.name}"><br><span>${country.name}</span>`;
+      div.onclick = () => {
+        countryCounts[country.name] = (countryCounts[country.name]||0)+1;
+        hiddenInput.value = Object.entries(countryCounts).map(([n,c])=>`${n}:${c}`).join(',');
+        flagOutput.textContent = Object.entries(countryCounts).map(([n,c])=>`${n}(${c})`).join(', ');
+        const totalV = Object.values(countryCounts).reduce((s,v)=>s+v,0);
+        document.getElementById("visitors").value = totalV;
+        calculateTotal();
+      };
+      flagGrid.appendChild(div);
+    }
+
+    function calculateTotal() {
+      const visitors = +document.getElementById("visitors").value||0;
+      const drivers = +document.getElementById("drivers").value||1;
+      const visitorPrice=10000;
+      const driverExtra=drivers>1?(drivers-1)*3000:0;
+      const totalVisitor=visitors*visitorPrice;
+      const total=totalVisitor+driverExtra;
+      document.getElementById("visitorCost").textContent=totalVisitor.toLocaleString()+"₮";
+      document.getElementById("driverCost").textContent=driverExtra.toLocaleString()+"₮";
+      document.getElementById("totalAmount").textContent=total.toLocaleString()+"₮";
+    }
+
+    function showConfirmation(){document.getElementById("confirmationModal").classList.remove("hidden");}
+    function hideConfirmation(){document.getElementById("confirmationModal").classList.add("hidden");}
+    function saveRegistration(){
+      const registration={date:new Date().toLocaleDateString("mn-MN"),guide:document.getElementById("guideName").value,company:document.getElementById("company").value||"-",drivers:+document.getElementById("drivers").value,visitors:+document.getElementById("visitors").value,countries:Object.entries(countryCounts).map(([n,c])=>`${n}(${c})`),total:document.getElementById("totalAmount").textContent};
+      const existing=JSON.parse(localStorage.getItem("registrations")||"[]");existing.push(registration);localStorage.setItem("registrations",JSON.stringify(existing));for(let k in countryCounts)delete countryCounts[k];hiddenInput.value="";flagOutput.textContent="";document.getElementById("visitors").value=0;calculateTotal();updateStats();updateRegistrationTable();hideConfirmation();}
+    function updateStats(){const regs=JSON.parse(localStorage.getItem("registrations")||"[]");const totalVisitors=regs.reduce((s,r)=>s+r.visitors,0);const totalIncome=regs.reduce((s,r)=>s+Number(r.total.replace(/[^0-9]/g,"")),0);document.getElementById("totalVisitors").textContent=totalVisitors.toLocaleString();document.getElementById("totalIncome").textContent=totalIncome.toLocaleString()+"₮";}
+    function updateRegistrationTable(){const tbody=document.getElementById("registrationTableBody");const regs=JSON.parse(localStorage.getItem("registrations")||"[]");tbody.innerHTML="";regs.slice(-5).reverse().forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${r.date}</td><td>${r.guide}</td><td>${r.visitors}</td><td>${r.countries.join(", ")}</td><td>${r.total}</td>`;tbody.appendChild(tr);});}
+    calculateTotal();updateStats();updateRegistrationTable();
+  </script>
+</body>
+</html>
