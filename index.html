@@ -71,7 +71,7 @@
       <h3>Сүүлийн бүртгэлүүд</h3>
       <table class="registration-table">
         <thead>
-          <tr><th>Огноо</th><th>Гид</th><th>Жуулчид</th><th>Улс</th><th>Төлбөр</th></tr>
+          <tr><th>Огноо</th><th>Хөтчийн нэр</th><th>Машины дугаар</th><th>company</th><th>Жуулчид</th><th>Улс</th><th>Төлбөр</th></tr>
         </thead>
         <tbody id="registrationTableBody"></tbody>
       </table>
@@ -137,6 +137,13 @@
       flagGrid.appendChild(div);
     }
 
+    /**
+     * Calculate the total cost based on the number of visitors and drivers.
+     * Updates the following elements with the calculated values:
+     * - visitorCost: the total cost of visitors
+     * - driverCost: the additional cost of drivers (if more than 1)
+     * - totalAmount: the total cost of visitors and drivers
+     */
     function calculateTotal() {
       const visitors = +document.getElementById("visitors").value||0;
       const drivers = +document.getElementById("drivers").value||1;
